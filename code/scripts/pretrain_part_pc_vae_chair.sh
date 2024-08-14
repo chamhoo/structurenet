@@ -1,5 +1,5 @@
 python ./pretrain_part_pc.py \
-  --exp_name 'part_pc_vae_chair' \
+  --exp_name 'part_pc_vae_chair_test' \
   --category 'Chair' \
   --data_path '../data/partnetdata/chair_geo' \
   --train_dataset 'train_no_other_less_than_10_parts.txt' \

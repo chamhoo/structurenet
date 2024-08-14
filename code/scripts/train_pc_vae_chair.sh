@@ -1,5 +1,5 @@
 python ./train_pc.py \
-  --exp_name 'pc_vae_chair' \
+  --exp_name 'pc_vae_chair_test' \
   --category 'Chair' \
   --data_path '../data/partnetdata/chair_hier' \
   --train_dataset 'train_no_other_less_than_10_parts.txt' \
