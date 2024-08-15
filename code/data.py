@@ -14,6 +14,31 @@ from collections import namedtuple
 from utils import one_hot
 import trimesh
 
+def normalize_point_cloud_torch(point_cloud):
+    """
+    将点云标准化到normalized space，适用于PyTorch张量。
+
+    参数:
+    point_cloud (torch.Tensor): 输入的点云，形状为 (B, N, 3)，
+                                B 是批量大小，N 是点的数量。
+
+    返回:
+    torch.Tensor: 标准化后的点云，形状为 (B, N, 3)。
+    """
+    # 计算点云的中心点
+    centroid = torch.mean(point_cloud, dim=1, keepdim=True)  # 形状 (B, 1, 3)
+    
+    # 平移点云，使其中心位于原点
+    point_cloud_centered = point_cloud - centroid  # 形状 (B, N, 3)
+    
+    # 计算点云到原点的最大距离
+    max_distance = torch.max(torch.sqrt(torch.sum(point_cloud_centered ** 2, dim=2)), dim=1, keepdim=True)[0]  # 形状 (B, 1)
+    
+    # 缩放点云，使其最大距离为1
+    normalized_point_cloud = point_cloud_centered / max_distance.unsqueeze(-1)  # 形状 (B, N, 3)
+    
+    return normalized_point_cloud
+
 # store a part hierarchy of graphs for a shape
 class Tree(object):
 
@@ -52,6 +77,7 @@ class Tree(object):
             self.part_id = part_id          # part_id in result_after_merging.json of PartNet
             self.box = box                  # box parameter for all nodes
             self.geo = geo                  # 1 x 1000 x 3 point cloud
+            self.norm_geo = normalize_point_cloud(geo) if geo is not None else None
             self.geo_feat = geo_feat        # 1 x 100 geometry feature
             self.label = label              # node semantic label at the current level
             self.full_label = full_label    # node semantic label from root (separated by slash)
@@ -122,6 +148,7 @@ class Tree(object):
                     edge['params'].to(device)
             if self.geo is not None:
                 self.geo = self.geo.to(device)
+                self.norm_geo = self.norm_geo.to(device)
 
             for child_node in self.children:
                 child_node.to(device)
@@ -309,6 +336,7 @@ class Tree(object):
             del node.geo_feat
             del node.box
             del node
+            del node.norm_geo
 
 
 # extend torch.data.Dataset class for PartNet
@@ -378,9 +406,12 @@ class PartNetDataset(data.Dataset):
 
             if 'geo' in node_json.keys():
                 node.geo = torch.tensor(np.array(node_json['geo']), dtype=torch.float32).view(1, -1, 3)
+                node.norm_geo = normalize_point_cloud_torch(node.geo)
 
             if load_geo:
                 node.geo = torch.tensor(geo_data['parts'][node_json['id']], dtype=torch.float32).view(1, -1, 3)
+                node.norm_geo = normalize_point_cloud_torch(node.geo)
+
 
             if 'box' in node_json:
                 node.box = torch.from_numpy(np.array(node_json['box'])).to(dtype=torch.float32)
@@ -431,6 +462,7 @@ class PartNetDataset(data.Dataset):
 
             if node.geo is not None:
                 node_json['geo'] = node.geo.cpu().numpy().reshape(-1).tolist()
+                node_json['normgeo'] = node.norm_geo.cpu().numpy().reshape(-1).tolist()
 
             if node.box is not None:
                 node_json['box'] = node.box.cpu().numpy().reshape(-1).tolist()
